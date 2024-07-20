@@ -1,4 +1,4 @@
-import utils
+import utils.utils as utils
 import time
 import torch
 import numpy as np
@@ -35,8 +35,7 @@ def train(loader, net, criterion, optimizer, epoch, logger, args):
             outputs = net(input, target)
         else:
             outputs = net(input, dec_inp)
-        print(outputs)
-        print(dec_inp.shape)
+
         loss = criterion(outputs, target)
         losses.update(loss.item(), input.size(0))
 

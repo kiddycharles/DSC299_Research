@@ -1,5 +1,4 @@
 from models.Informer.model import Informer, InformerStack
-from models.Linformer.model import Linformer
 # from torchsummaryX import summary as summaryx
 # from torchsummary import summary
 # from models.Reformer.reformer_enc_dec import ReformerEncDec
@@ -16,6 +15,7 @@ from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from train import train, test, evaluate
 
 plt.rcParams['agg.path.chunksize'] = 10000
 parser = argparse.ArgumentParser(description='Time series forecasting')
@@ -81,10 +81,11 @@ parser.add_argument('--use_gpu', type=bool, default=True, help='use gpu')
 parser.add_argument('--use_multi_gpu', action='store_true', help='use multiple gpus', default=False)
 parser.add_argument('--devices', type=str, default='0,1,2,3', help='device ids of multile gpus')
 
-args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+parser.add_argument('--device', type=str, default=device)
 
+args = parser.parse_args()
 
 def inverse(x, mini, maxi):
     output = mini + x * (maxi - mini)
@@ -92,19 +93,20 @@ def inverse(x, mini, maxi):
 
 
 def main():
-    file_list = sorted(os.listdir(args.train_dir))    # list all the file names under train_directory
+    file_list = sorted(os.listdir(args.traindir))    # list all the file names under train_directory
     data_list = [file for file in file_list if file.endswith(".csv")]   # filter out file with .csv ending
     if args.dataset == 'e':
         data_list = ['e_DOM.csv', 'e_AEP.csv']
     elif args.dataset == 'stock':
-        data_list = ['AMD.csv', 'NVDA.csv', '^IXIC.csv', 'DJI.csv']
+        data_list = ['AMD.csv', 'NVDA.csv']
 
     for i in range(len(data_list)):
         type_dict = {
             'type1': [35, 14, 7],
-            'type2': [70, 30, 14],
+            'type2': [70, 28, 14],
             'type3': [100, 50, 25],
             'type4': [200, 75, 35],
+            'type5': [300, 150, 50]
         }
 
         for key in type_dict.keys():
@@ -113,7 +115,7 @@ def main():
             args.label_len = type_dict[key][1]  # start token length of Informer decoder
             args.pred_len = type_dict[key][2]  # prediction sequence length
 
-            args.save_root = f'./exp/{args.model}-{key}-{args.folder_name}/'
+            args.save_root = f'./exp_20200101_RevIN_freq_v2/{args.model}-{key}-{args.folder_name}/'
 
             train_dataset = dataloader.loader(args.traindir, data_list[i],
                                               seq_size=type_dict[key], loader_type='train', args=args)
@@ -203,7 +205,8 @@ def main():
                                              dec_use_full_attn=args.dec_use_full_attn).to(device)
 
             # net = nn.DataParallel(net)
-
+            total_params = sum(p.numel() for p in net.parameters())
+            print(f"Number of parameters: {total_params}")
             criterion = nn.MSELoss().to(device)
 
             optimizer = optim.Adam(net.parameters(), lr=1e-3)
@@ -222,7 +225,7 @@ def main():
                                     args)
                 epoch, tst_loss, preds, trues = test(test_loader, net, criterion, epoch, test_logger, args)
 
-            pred, trues = evaluate(test_loader, net, criterion)
+            pred, trues = evaluate(test_loader, net, criterion, args)
 
             torch.save(net.state_dict(),
                        os.path.join(save_path, f'model_{int(args.epochs)}.pth'))

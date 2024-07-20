@@ -7,13 +7,16 @@ from models.Informer.encoder import Encoder, EncoderLayer, ConvLayer, EncoderSta
 from models.Informer.decoder import Decoder, DecoderLayer
 from models.Informer.attn import FullAttention, ProbAttention, AttentionLayer
 from models.Informer.embed import DataEmbedding
+from models.RevIN import RevIN
+from models.RevIN_with_Skewness_Kurtosis import RevIN_w_SK
+from models.RevIN_freq import RevIN_freq
 
 
 class Informer(nn.Module):
     def __init__(self, enc_in, dec_in, c_out, seq_len, label_len, out_len,
                  factor=5, d_model=512, n_heads=8, e_layers=3, d_layers=2, d_ff=512,
                  dropout=0.0, attn='prob', embed='fixed', freq='h', activation='gelu',
-                 output_attention=False, distil=True, mix=True):
+                 output_attention=False, distil=True, mix=True, used_RevIN=True):
         super(Informer, self).__init__()
         self.pred_len = out_len
         self.attn = attn
@@ -64,8 +67,18 @@ class Informer(nn.Module):
         # self.end_conv2 = nn.Conv1d(in_channels=d_model, out_channels=c_out, kernel_size=1, bias=True)
         self.projection = nn.Linear(d_model, c_out, bias=True)
 
+        self.use_RevIN = used_RevIN
+        if self.use_RevIN:
+            self.revin_freq = RevIN_freq(enc_in)
+            self.revin = RevIN(enc_in)
+
     def forward(self, x_enc, x_dec,
                 enc_self_mask=None, dec_self_mask=None, dec_enc_mask=None):
+
+        if self.use_RevIN:
+            x_enc = self.revin(x_enc, 'norm')
+            # x_enc_freq = self.revin_freq(x_enc, 'freq')
+            # x_enc = torch.concat([x_enc, x_enc_freq], dim=-1)
 
         enc_out = self.enc_embedding(x_enc)
         enc_out, attns = self.encoder(enc_out, attn_mask=enc_self_mask)
@@ -76,10 +89,14 @@ class Informer(nn.Module):
 
         # dec_out = self.end_conv1(dec_out)
         # dec_out = self.end_conv2(dec_out.transpose(2,1)).transpose(1,2)
+        if self.use_RevIN:
+            dec_out = self.revin(dec_out, 'denorm')
+            # dec_out = self.revin_freq(dec_out, 'denorm')
+            # dec_out = self.
+
         if self.output_attention:
             return dec_out[:, -self.pred_len:, :], attns
         else:
-            print("here")
             return dec_out[:, -self.pred_len:, :]  # [B, L, D]
 
 

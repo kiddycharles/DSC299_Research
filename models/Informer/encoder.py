@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class ConvLayer(nn.Module):
     def __init__(self, c_in):
         super(ConvLayer, self).__init__()
@@ -19,13 +20,14 @@ class ConvLayer(nn.Module):
         x = self.norm(x)
         x = self.activation(x)
         x = self.maxPool(x)
-        x = x.transpose(1,2)
+        x = x.transpose(1, 2)
         return x
+
 
 class EncoderLayer(nn.Module):
     def __init__(self, attention, d_model, d_ff=None, dropout=0.1, activation="relu"):
         super(EncoderLayer, self).__init__()
-        d_ff = d_ff or 4*d_model
+        d_ff = d_ff or 4 * d_model
         self.attention = attention
         self.conv1 = nn.Conv1d(in_channels=d_model, out_channels=d_ff, kernel_size=1)
         self.conv2 = nn.Conv1d(in_channels=d_ff, out_channels=d_model, kernel_size=1)
@@ -42,15 +44,16 @@ class EncoderLayer(nn.Module):
         # ))
         new_x, attn = self.attention(
             x, x, x,
-            attn_mask = attn_mask
+            attn_mask=attn_mask
         )
         x = x + self.dropout(new_x)
 
         y = x = self.norm1(x)
-        y = self.dropout(self.activation(self.conv1(y.transpose(-1,1))))
-        y = self.dropout(self.conv2(y).transpose(-1,1))
+        y = self.dropout(self.activation(self.conv1(y.transpose(-1, 1))))
+        y = self.dropout(self.conv2(y).transpose(-1, 1))
 
-        return self.norm2(x+y), attn
+        return self.norm2(x + y), attn
+
 
 class Encoder(nn.Module):
     def __init__(self, attn_layers, conv_layers=None, norm_layer=None):
@@ -79,6 +82,7 @@ class Encoder(nn.Module):
 
         return x, attns
 
+
 class EncoderStack(nn.Module):
     def __init__(self, encoders, inp_lens):
         super(EncoderStack, self).__init__()
@@ -87,11 +91,13 @@ class EncoderStack(nn.Module):
 
     def forward(self, x, attn_mask=None):
         # x [B, L, D]
-        x_stack = []; attns = []
+        x_stack = []
+        attns = []
         for i_len, encoder in zip(self.inp_lens, self.encoders):
-            inp_len = x.shape[1]//(2**i_len)
+            inp_len = x.shape[1] // (2 ** i_len)
             x_s, attn = encoder(x[:, -inp_len:, :])
-            x_stack.append(x_s); attns.append(attn)
+            x_stack.append(x_s)
+            attns.append(attn)
         x_stack = torch.cat(x_stack, -2)
-        
+
         return x_stack, attns
